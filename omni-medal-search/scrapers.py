@@ -9,12 +9,14 @@ HEADERS = {
 
 def scrape_imo(start_year: int = 1959, end_year: int = 2024) -> List[Dict[str, Any]]:
     results = []
+    print("--- Lade IMO Daten ---")
     
-    with httpx.Client(headers=HEADERS, follow_redirects=True, timeout=15.0) as client:
+    with httpx.Client(headers=HEADERS, follow_redirects=True, timeout=10.0) as client:
         for year in range(start_year, end_year + 1):
             if year == 1980:
                 continue
             
+            print(f"IMO {year}...", end="\r", flush=True)
             url = f"https://www.imo-official.org/year_individual_r.aspx?year={year}"
             try:
                 response = client.get(url)
@@ -44,17 +46,20 @@ def scrape_imo(start_year: int = 1959, end_year: int = 2024) -> List[Dict[str, A
                         "score": total_score,
                         "award": award
                     })
-                time.sleep(0.5)
+                time.sleep(0.3)
             except Exception:
                 pass
                 
+    print("\nIMO abgeschlossen.")
     return results
 
 def scrape_ioi(start_year: int = 1989, end_year: int = 2024) -> List[Dict[str, Any]]:
     results = []
+    print("--- Lade IOI Daten ---")
     
-    with httpx.Client(headers=HEADERS, follow_redirects=True, timeout=15.0) as client:
+    with httpx.Client(headers=HEADERS, follow_redirects=True, timeout=10.0) as client:
         for year in range(start_year, end_year + 1):
+            print(f"IOI {year}...", end="\r", flush=True)
             url = f"https://stats.ioinformatics.org/results/{year}"
             try:
                 response = client.get(url)
@@ -84,17 +89,20 @@ def scrape_ioi(start_year: int = 1989, end_year: int = 2024) -> List[Dict[str, A
                         "score": score,
                         "award": award
                     })
-                time.sleep(0.5)
+                time.sleep(0.3)
             except Exception:
                 pass
 
+    print("\nIOI abgeschlossen.")
     return results
 
 def scrape_imc(start_year: int = 1994, end_year: int = 2024) -> List[Dict[str, Any]]:
     results = []
+    print("--- Lade IMC Daten ---")
     
-    with httpx.Client(headers=HEADERS, follow_redirects=True, timeout=15.0) as client:
+    with httpx.Client(headers=HEADERS, follow_redirects=True, timeout=10.0) as client:
         for year in range(start_year, end_year + 1):
+            print(f"IMC {year}...", end="\r", flush=True)
             url = f"https://www.imc-math.org.uk/imc{year}/results.html"
             try:
                 response = client.get(url)
@@ -123,17 +131,20 @@ def scrape_imc(start_year: int = 1994, end_year: int = 2024) -> List[Dict[str, A
                         "score": None,
                         "award": award
                     })
-                time.sleep(0.5)
+                time.sleep(0.3)
             except Exception:
                 pass
 
+    print("\nIMC abgeschlossen.")
     return results
 
 def scrape_icpc(start_year: int = 2000, end_year: int = 2024) -> List[Dict[str, Any]]:
     results = []
+    print("--- Lade ICPC Daten ---")
     
-    with httpx.Client(headers=HEADERS, follow_redirects=True, timeout=15.0) as client:
+    with httpx.Client(headers=HEADERS, follow_redirects=True, timeout=10.0) as client:
         for year in range(start_year, end_year + 1):
+            print(f"ICPC {year}...", end="\r", flush=True)
             url = f"https://icpc.global/api/worldfinals/results/{year}"
             try:
                 response = client.get(url)
@@ -152,8 +163,9 @@ def scrape_icpc(start_year: int = 2000, end_year: int = 2024) -> List[Dict[str, 
                                 "score": float(team.get("solved", 0)),
                                 "award": f"Rank {award}" if isinstance(award, int) else str(award)
                             })
-                time.sleep(0.5)
+                time.sleep(0.3)
             except Exception:
                 pass
 
+    print("\nICPC abgeschlossen.")
     return results
