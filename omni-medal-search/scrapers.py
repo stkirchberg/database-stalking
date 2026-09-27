@@ -47,8 +47,8 @@ def scrape_imo(start_year: int = 1959, end_year: int = 2024) -> List[Dict[str, A
                         "award": award
                     })
                 time.sleep(0.3)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Fehler bei {year}: {e}")
                 
     print("\nIMO abgeschlossen.")
     return results
@@ -90,8 +90,8 @@ def scrape_ioi(start_year: int = 1989, end_year: int = 2024) -> List[Dict[str, A
                         "award": award
                     })
                 time.sleep(0.3)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Fehler bei {year}: {e}")
 
     print("\nIOI abgeschlossen.")
     return results
@@ -132,8 +132,8 @@ def scrape_imc(start_year: int = 1994, end_year: int = 2024) -> List[Dict[str, A
                         "award": award
                     })
                 time.sleep(0.3)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Fehler bei {year}: {e}")
 
     print("\nIMC abgeschlossen.")
     return results
@@ -164,8 +164,8 @@ def scrape_icpc(start_year: int = 2000, end_year: int = 2024) -> List[Dict[str, 
                                 "award": f"Rank {award}" if isinstance(award, int) else str(award)
                             })
                 time.sleep(0.3)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Fehler bei {year}: {e}")
 
     print("\nICPC abgeschlossen.")
     return results

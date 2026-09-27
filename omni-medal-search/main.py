@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from sqlalchemy import create_engine, func
 from sqlalchemy.orm import Session, sessionmaker, aliased
+from thefuzz import fuzz
 from typing import Optional
 import os
 from models import Person, Participation
@@ -31,7 +32,7 @@ def get_db():
 @app.get("/", response_class=HTMLResponse)
 def serve_ui():
     """Lädt das HTML-Frontend direkt beim Aufruf der Hauptadresse."""
-    html_path = os.path.join(os.path.dirname(__file__), "index.html")
+    html_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
     if os.path.exists(html_path):
         with open(html_path, "r", encoding="utf-8") as f:
             return f.read()
@@ -52,29 +53,39 @@ def get_stats(db: Session = Depends(get_db)):
 @app.get("/api/persons")
 def search_persons(
     name: Optional[str] = Query(None, description="Name der Person suchen"),
-    competition: Optional[str] = Query(None, description="Wettbewerb filtern (IMO, IOI, IMC, ICPC)"),
-    award: Optional[str] = Query(None, description="Medaillen-Filter (z.B. Gold, Silver, Bronze)"),
+    competition: Optional[str] = Query(None, description="Wettbewerb filtern"),
+    award: Optional[str] = Query(None, description="Medaillen-Filter"),
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db)
 ):
-    """Einfache Suche nach Name, einzelnem Wettbewerb oder einzelner Medaille."""
     query = db.query(Person).join(Person.participations)
 
-    if name:
-        query = query.filter(Person.full_name.ilike(f"%{name}%"))
     if competition:
         query = query.filter(Participation.competition == competition.upper())
     if award:
         query = query.filter(Participation.award.ilike(f"%{award}%"))
 
-    persons = query.distinct().limit(limit).all()
+    persons = query.distinct().all()
+
+    if name:
+        search_name = name.lower()
+        filtered_persons = []
+        for p in persons:
+            if fuzz.partial_ratio(search_name, p.full_name.lower()) >= 75:
+                filtered_persons.append(p)
+        persons = filtered_persons
+
+    persons = persons[:limit]
 
     return [
         {
             "id": p.id,
             "name": p.full_name,
             "country": p.country,
-            "participations": [{"competition": part.competition, "year": part.year, "score": part.score, "award": part.award} for part in p.participations]
+            "participations": [
+                {"competition": part.competition, "year": part.year, "score": part.score, "award": part.award} 
+                for part in p.participations
+            ]
         }
         for p in persons
     ]
