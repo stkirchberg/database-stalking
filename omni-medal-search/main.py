@@ -1,14 +1,25 @@
 from fastapi import FastAPI, Depends, Query
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session, sessionmaker
-from typing import List, Optional
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+from sqlalchemy import create_engine, func
+from sqlalchemy.orm import Session, sessionmaker, aliased
+from typing import Optional
+import os
 from models import Person, Participation
 
 DATABASE_URL = "sqlite:///olympiads.db"
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-app = FastAPI(title="Olympiad Results Explorer")
+app = FastAPI(title="Olympiad Results Explorer & Analysis")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def get_db():
     db = SessionLocal()
@@ -17,63 +28,89 @@ def get_db():
     finally:
         db.close()
 
-@app.get("/")
-def home():
-    return {"message": "Willkommen bei der Olympiaden-Datenbank API! Gehe zu /docs um die Ergebnisse zu durchsuchen."}
+@app.get("/", response_class=HTMLResponse)
+def serve_ui():
+    """Lädt das HTML-Frontend direkt beim Aufruf der Hauptadresse."""
+    html_path = os.path.join(os.path.dirname(__file__), "index.html")
+    if os.path.exists(html_path):
+        with open(html_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return "<h1>Fehler: index.html nicht gefunden.</h1><p>Bitte lege die Datei im selben Verzeichnis wie main.py ab.</p>"
 
-@app.get("/persons")
+@app.get("/stats")
+def get_stats(db: Session = Depends(get_db)):
+    """Zeigt eine Übersicht aller Datensätze in der Datenbank"""
+    total_persons = db.query(Person).count()
+    total_participations = db.query(Participation).count()
+    comp_counts = db.query(Participation.competition, func.count(Participation.id)).group_by(Participation.competition).all()
+    return {
+        "total_persons": total_persons,
+        "total_participations": total_participations,
+        "by_competition": dict(comp_counts)
+    }
+
+@app.get("/api/persons")
 def search_persons(
     name: Optional[str] = Query(None, description="Name der Person suchen"),
     competition: Optional[str] = Query(None, description="Wettbewerb filtern (IMO, IOI, IMC, ICPC)"),
+    award: Optional[str] = Query(None, description="Medaillen-Filter (z.B. Gold, Silver, Bronze)"),
+    limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db)
 ):
-    """Durchsucht Personen und liefert ihre Teilnahmen und Medaillen zurück"""
-    query = db.query(Person)
+    """Einfache Suche nach Name, einzelnem Wettbewerb oder einzelner Medaille."""
+    query = db.query(Person).join(Person.participations)
 
     if name:
         query = query.filter(Person.full_name.ilike(f"%{name}%"))
-        
     if competition:
-        query = query.join(Person.participations).filter(Participation.competition == competition.upper())
+        query = query.filter(Participation.competition == competition.upper())
+    if award:
+        query = query.filter(Participation.award.ilike(f"%{award}%"))
 
-    persons = query.limit(50).all()
+    persons = query.distinct().limit(limit).all()
 
     return [
         {
             "id": p.id,
             "name": p.full_name,
-            "country_or_uni": p.country,
-            "participations": [
-                {
-                    "competition": part.competition,
-                    "year": part.year,
-                    "score": part.score,
-                    "award": part.award
-                }
-                for part.participations in [p.participations] for part in part.participations
-            ]
+            "country": p.country,
+            "participations": [{"competition": part.competition, "year": part.year, "score": part.score, "award": part.award} for part in p.participations]
         }
         for p in persons
     ]
 
-@app.get("/persons/{person_id}")
-def get_person_details(person_id: int, db: Session = Depends(get_db)):
-    """Holt die vollständige Historie einer einzelnen Person"""
-    person = db.query(Person).filter(Person.id == person_id).first()
-    if not person:
-        return {"error": "Person nicht gefunden"}
-    
-    return {
-        "id": person.id,
-        "name": person.full_name,
-        "country": person.country,
-        "history": [
-            {
-                "competition": part.competition,
-                "year": part.year,
-                "score": part.score,
-                "award": part.award
-            }
-            for part.participations in [person.participations] for part in part.participations
-        ]
-    }
+@app.get("/api/crossover")
+def get_crossover_winners(
+    comp1: str = Query(..., description="Erster Wettbewerb"),
+    award1: str = Query(..., description="Medaillentyp Wettbewerb 1"),
+    comp2: str = Query(..., description="Zweiter Wettbewerb"),
+    award2: str = Query(..., description="Medaillentyp Wettbewerb 2"),
+    db: Session = Depends(get_db)
+):
+    """Komplexe Kombinationssuche: Findet Personen, die in zwei verschiedenen Wettbewerben spezifische Auszeichnungen gewonnen haben."""
+    p1 = aliased(Participation)
+    p2 = aliased(Participation)
+
+    results = (
+        db.query(Person)
+        .join(p1, Person.id == p1.person_id)
+        .join(p2, Person.id == p2.person_id)
+        .filter(
+            p1.competition == comp1.upper(),
+            p1.award.ilike(f"%{award1}%"),
+            p2.competition == comp2.upper(),
+            p2.award.ilike(f"%{award2}%")
+        )
+        .distinct()
+        .all()
+    )
+
+    return [
+        {
+            "id": p.id,
+            "name": p.full_name,
+            "country": p.country,
+            "participations": [{"competition": part.competition, "year": part.year, "score": part.score, "award": part.award} for part in p.participations]
+        }
+        for p in results
+    ]

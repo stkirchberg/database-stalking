@@ -3,125 +3,266 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Omni Medal Search - Elite Finder</title>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <title>Olympiaden-Datenbank UI</title>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #0f172a; color: #e2e8f0; }
+        .medal-gold { background-color: #fbbf24; color: #78350f; border: 1px solid #d97706; }
+        .medal-silver { background-color: #e5e7eb; color: #374151; border: 1px solid #9ca3af; }
+        .medal-bronze { background-color: #feba74; color: #7c2d12; border: 1px solid #ea580c; }
+        .medal-other { background-color: #f3f4f6; color: #4b5563; border: 1px solid #d1d5db; }
+        
+        .loader {
+            border-top-color: #3b82f6;
+            animation: spinner 1.5s linear infinite;
+        }
+        @keyframes spinner {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
-<body class="min-h-screen p-8">
-    <div id="app" class="max-w-5xl mx-auto space-y-8">
-        
-        <header class="border-b border-slate-700 pb-4 flex justify-between items-end">
+<body class="bg-gray-100 min-h-screen text-gray-800 font-sans">
+
+    <header class="bg-blue-800 text-white shadow-lg py-6">
+        <div class="container mx-auto px-6 flex justify-between items-center">
             <div>
-                <h1 class="text-4xl font-bold text-blue-400">Omni Medal Search</h1>
-                <p class="text-slate-400 mt-2">Finde die Legenden: IMO, ICPC, IMC Kombinations-Suche</p>
+                <h1 class="text-3xl font-extrabold tracking-tight">Olympiaden Explorer</h1>
+                <p class="text-blue-200 mt-1">IMO, IOI, IMC & ICPC Resultate durchsuchen</p>
             </div>
-            <div class="space-x-2">
-                <button @click="triggerImport('imo')" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded text-sm">IMO Importieren</button>
-                <button @click="triggerImport('icpc')" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded text-sm">ICPC Importieren</button>
-                <button @click="triggerImport('imc')" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded text-sm">IMC Importieren</button>
+            <div id="stats-container" class="text-sm text-right opacity-0 transition-opacity duration-500">
+                <p>Personen in DB: <span id="stat-persons" class="font-bold">...</span></p>
+                <p>Teilnahmen: <span id="stat-parts" class="font-bold">...</span></p>
             </div>
-        </header>
+        </div>
+    </header>
 
-        <div class="bg-slate-800 p-6 rounded-lg shadow-lg">
-            <h2 class="text-xl font-semibold mb-4 text-blue-300">Suchkriterien (UND-Verknüpfung)</h2>
+    <main class="container mx-auto px-6 py-8">
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
             
-            <div class="flex space-x-4 mb-4">
-                <select v-model="newFilter.competition" class="bg-slate-900 border border-slate-600 rounded p-2 text-white flex-1">
-                    <option value="" disabled>Wettbewerb wählen</option>
-                    <option value="IMO">IMO (Mathe Olympiade)</option>
-                    <option value="ICPC">ICPC (Programmieren)</option>
-                    <option value="IMC">IMC (Uni Mathe)</option>
-                </select>
-
-                <select v-model="newFilter.medal" class="bg-slate-900 border border-slate-600 rounded p-2 text-white flex-1">
-                    <option value="" disabled>Medaille wählen</option>
-                    <option value="Gold">Gold Medal / First Prize</option>
-                    <option value="Silver">Silver Medal / Second Prize</option>
-                    <option value="Bronze">Bronze Medal</option>
-                </select>
-
-                <button @click="addFilter" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded font-bold transition">Hinzufügen</button>
+            <div class="bg-white rounded-xl shadow-md p-6 border-t-4 border-blue-500">
+                <h2 class="text-xl font-bold mb-4 text-gray-700">1. Standardsuche</h2>
+                <p class="text-sm text-gray-500 mb-4">Suche nach Namen oder filtere nach einem spezifischen Wettbewerb.</p>
+                
+                <form id="search-form" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Name (optional)</label>
+                        <input type="text" id="s-name" placeholder="z.B. Alex, Gao..." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border">
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Wettbewerb</label>
+                            <select id="s-comp" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border">
+                                <option value="">Alle</option>
+                                <option value="IMO">IMO (Mathe)</option>
+                                <option value="IOI">IOI (Informatik)</option>
+                                <option value="IMC">IMC (Uni Mathe)</option>
+                                <option value="ICPC">ICPC (Uni Info)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Auszeichnung</label>
+                            <select id="s-award" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border">
+                                <option value="">Alle</option>
+                                <option value="Gold">Gold Medaille</option>
+                                <option value="Silver">Silber Medaille</option>
+                                <option value="Bronze">Bronze Medaille</option>
+                                <option value="First Prize">First Prize (IMC)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-200">
+                        Suchen
+                    </button>
+                </form>
             </div>
 
-            <div class="flex flex-wrap gap-2 mb-4">
-                <div v-for="(filter, index) in filters" :key="index" class="bg-blue-900 text-blue-100 px-3 py-1 rounded-full flex items-center shadow">
-                    {{ filter.competition }} - {{ filter.medal }}
-                    <button @click="removeFilter(index)" class="ml-2 text-red-400 hover:text-red-300 font-bold">×</button>
-                </div>
+            <div class="bg-white rounded-xl shadow-md p-6 border-t-4 border-purple-500">
+                <h2 class="text-xl font-bold mb-4 text-gray-700">2. Kombinations-Suche (Crossover)</h2>
+                <p class="text-sm text-gray-500 mb-4">Finde Ausnahmetalente, die in <b>zwei</b> verschiedenen Wettbewerben gepunktet haben.</p>
+                
+                <form id="combo-form" class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4 p-3 bg-gray-50 rounded-lg">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 uppercase tracking-wide">Bedingung 1</label>
+                            <select id="c-comp1" class="mt-1 block w-full rounded-md p-2 border text-sm" required>
+                                <option value="IMO" selected>IMO (Mathe)</option>
+                                <option value="IOI">IOI (Informatik)</option>
+                                <option value="IMC">IMC</option>
+                                <option value="ICPC">ICPC</option>
+                            </select>
+                            <select id="c-award1" class="mt-2 block w-full rounded-md p-2 border text-sm" required>
+                                <option value="Gold" selected>Gold Medaille</option>
+                                <option value="Silver">Silber Medaille</option>
+                                <option value="Bronze">Bronze Medaille</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-xs font-bold text-gray-600 uppercase tracking-wide">Bedingung 2</label>
+                            <select id="c-comp2" class="mt-1 block w-full rounded-md p-2 border text-sm" required>
+                                <option value="IOI" selected>IOI (Informatik)</option>
+                                <option value="IMO">IMO (Mathe)</option>
+                                <option value="IMC">IMC</option>
+                                <option value="ICPC">ICPC</option>
+                            </select>
+                            <select id="c-award2" class="mt-2 block w-full rounded-md p-2 border text-sm" required>
+                                <option value="Gold" selected>Gold Medaille</option>
+                                <option value="Silver">Silber Medaille</option>
+                                <option value="Bronze">Bronze Medaille</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded transition duration-200">
+                        Kombination Finden
+                    </button>
+                </form>
             </div>
-
-            <button @click="search" class="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded font-bold text-lg shadow-lg transition">Suchen</button>
+            
         </div>
 
-        <!-- Ergebnisse -->
-        <div v-if="results.length > 0" class="bg-slate-800 rounded-lg shadow-lg overflow-hidden">
-            <table class="w-full text-left">
-                <thead class="bg-slate-900 border-b border-slate-700">
-                    <tr>
-                        <th class="p-4">Name</th>
-                        <th class="p-4">Land</th>
-                        <th class="p-4">Zugeordnete Errungenschaften</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-700">
-                    <tr v-for="person in results" :key="person.id" class="hover:bg-slate-750 transition">
-                        <td class="p-4 font-bold text-white">{{ person.canonical_name }}</td>
-                        <td class="p-4">{{ person.country || 'Unbekannt' }}</td>
-                        <td class="p-4 text-sm text-slate-300">{{ person.all_achievements }}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        <div v-else-if="hasSearched" class="text-center p-8 text-slate-400 bg-slate-800 rounded-lg">
-            Keine Person gefunden, die exakt diese Kombination besitzt.
+
+        <div id="loading" class="hidden flex justify-center items-center py-10">
+            <div class="loader ease-linear rounded-full border-4 border-t-4 h-12 w-12 mb-4"></div>
         </div>
 
-    </div>
+        <div id="results-header" class="hidden mb-4 border-b pb-2 flex justify-between items-end">
+            <h2 class="text-2xl font-bold text-gray-800">Suchergebnisse</h2>
+            <span id="results-count" class="text-gray-600 font-medium bg-gray-200 px-3 py-1 rounded-full text-sm"></span>
+        </div>
+        
+        <div id="results-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+        </div>
+
+    </main>
 
     <script>
-        const { createApp, ref } = Vue;
 
-        createApp({
-            setup() {
-                const filters = ref([]);
-                const newFilter = ref({ competition: '', medal: '' });
-                const results = ref([]);
-                const hasSearched = ref(false);
+        function getMedalClass(awardText) {
+            const lower = awardText.toLowerCase();
+            if (lower.includes('gold') || lower.includes('first')) return 'medal-gold';
+            if (lower.includes('silver') || lower.includes('second')) return 'medal-silver';
+            if (lower.includes('bronze') || lower.includes('third')) return 'medal-bronze';
+            return 'medal-other';
+        }
 
-                const addFilter = () => {
-                    if (newFilter.value.competition && newFilter.value.medal) {
-                        filters.value.push({ ...newFilter.value });
-                        newFilter.value = { competition: '', medal: '' };
-                    }
-                };
+        function createPersonCard(person) {
 
-                const removeFilter = (index) => {
-                    filters.value.splice(index, 1);
-                };
+            const sortedParts = person.participations.sort((a, b) => b.year - a.year);
 
-                const search = async () => {
-                    if (filters.value.length === 0) return;
-                    hasSearched.value = true;
-                    const res = await fetch('/api/search', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ filters: filters.value })
-                    });
-                    results.value = await res.json();
-                };
+            const participationsHtml = sortedParts.map(p => `
+                <li class="flex justify-between items-center text-sm py-1 border-b border-gray-100 last:border-0">
+                    <div>
+                        <span class="font-bold text-gray-700">${p.competition}</span>
+                        <span class="text-gray-500 text-xs ml-1">${p.year}</span>
+                    </div>
+                    <span class="px-2 py-1 text-xs font-semibold rounded-full shadow-sm ${getMedalClass(p.award)}">
+                        ${p.award}
+                    </span>
+                </li>
+            `).join('');
 
-                const triggerImport = async (comp) => {
-                    const res = await fetch(`/api/import/${comp}`, { method: 'POST' });
-                    const data = await res.json();
-                    alert(data.message);
-                };
+            const countryText = person.country ? person.country : 'Unbekanntes Land / Uni';
 
-                return { filters, newFilter, results, hasSearched, addFilter, removeFilter, search, triggerImport }
+            return `
+                <div class="bg-white rounded-lg shadow hover:shadow-lg transition-shadow duration-300 overflow-hidden flex flex-col">
+                    <div class="p-5 border-b bg-gray-50 flex-grow-0">
+                        <h3 class="text-lg font-bold text-gray-800">${person.name}</h3>
+                        <p class="text-sm text-gray-500 flex items-center mt-1">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            ${countryText}
+                        </p>
+                    </div>
+                    <div class="p-5 flex-grow">
+                        <h4 class="text-xs uppercase font-bold text-gray-400 mb-3 tracking-wider">Wettkampfhistorie</h4>
+                        <ul class="space-y-1">
+                            ${participationsHtml}
+                        </ul>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function fetchResults(url) {
+            const container = document.getElementById('results-container');
+            const header = document.getElementById('results-header');
+            const countLabel = document.getElementById('results-count');
+            const loader = document.getElementById('loading');
+            
+            container.innerHTML = '';
+            header.classList.add('hidden');
+            loader.classList.remove('hidden');
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Netzwerkfehler beim Abrufen der Daten");
+                const data = await response.json();
+                
+                loader.classList.add('hidden');
+                header.classList.remove('hidden');
+                
+                if (data.length === 0) {
+                    countLabel.innerText = "0 Treffer";
+                    container.innerHTML = `<div class="col-span-full text-center py-12 bg-white rounded-lg shadow border border-gray-100">
+                        <p class="text-gray-500 text-lg">Keine Teilnehmer für diese Kriterien gefunden.</p>
+                    </div>`;
+                    return;
+                }
+
+                countLabel.innerText = `${data.length} Treffer gefunden`;
+                container.innerHTML = data.map(createPersonCard).join('');
+                
+            } catch (error) {
+                loader.classList.add('hidden');
+                container.innerHTML = `<div class="col-span-full text-center py-10 text-red-500 font-bold">Fehler beim Laden: ${error.message}</div>`;
             }
-        }).mount('#app');
+        }
+
+        document.getElementById('search-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const name = document.getElementById('s-name').value;
+            const comp = document.getElementById('s-comp').value;
+            const award = document.getElementById('s-award').value;
+            
+            let query = new URLSearchParams();
+            if (name) query.append('name', name);
+            if (comp) query.append('competition', comp);
+            if (award) query.append('award', award);
+            
+            fetchResults(`/api/persons?${query.toString()}`);
+        });
+
+        document.getElementById('combo-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const comp1 = document.getElementById('c-comp1').value;
+            const award1 = document.getElementById('c-award1').value;
+            const comp2 = document.getElementById('c-comp2').value;
+            const award2 = document.getElementById('c-award2').value;
+            
+            let query = new URLSearchParams({
+                comp1: comp1, award1: award1,
+                comp2: comp2, award2: award2
+            });
+            
+            fetchResults(`/api/crossover?${query.toString()}`);
+        });
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const res = await fetch('/stats');
+                const data = await res.json();
+                document.getElementById('stat-persons').innerText = data.total_persons.toLocaleString('de-DE');
+                document.getElementById('stat-parts').innerText = data.total_participations.toLocaleString('de-DE');
+                document.getElementById('stats-container').classList.remove('opacity-0');
+            } catch(e) {
+                console.error("Stats konnten nicht geladen werden", e);
+            }
+        });
     </script>
 </body>
 </html>
