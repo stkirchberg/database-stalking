@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from models import Base, Person, Participation
-from scrapers import scrape_imo, scrape_ioi
+from scrapers import scrape_imo, scrape_ioi, scrape_imc, scrape_icpc
 
 DATABASE_URL = "sqlite:///olympiads.db"
 
@@ -11,11 +11,11 @@ def run_import():
     Session = sessionmaker(bind=engine)
     session = Session()
 
-    print("Starte Datenimport...")
-
     all_data = []
     all_data.extend(scrape_imo(1959, 2024))
     all_data.extend(scrape_ioi(1989, 2024))
+    all_data.extend(scrape_imc(1994, 2024))
+    all_data.extend(scrape_icpc(2000, 2024))
 
     person_cache = {}
 
@@ -47,7 +47,6 @@ def run_import():
         session.add(participation)
 
     session.commit()
-    print("Import erfolgreich abgeschlossen!")
 
 if __name__ == "__main__":
     run_import()

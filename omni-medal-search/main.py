@@ -1,69 +1,79 @@
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-from typing import List
-import sqlite3
-import database
-import importers
+from fastapi import FastAPI, Depends, Query
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import Session, sessionmaker
+from typing import List, Optional
+from models import Person, Participation
 
-app = FastAPI()
+DATABASE_URL = "sqlite:///olympiads.db"
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-database.init_db()
+app = FastAPI(title="Olympiad Results Explorer")
 
-class FilterCriteria(BaseModel):
-    competition: str
-    medal: str
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
-class SearchRequest(BaseModel):
-    filters: List[FilterCriteria]
+@app.get("/")
+def home():
+    return {"message": "Willkommen bei der Olympiaden-Datenbank API! Gehe zu /docs um die Ergebnisse zu durchsuchen."}
 
-@app.post("/api/import/{competition}")
-def run_import(competition: str):
-    """
-    Triggert den Import für eine spezifische Datenbank.
-    Erwartet z.B. eine imo_data.csv im Ordner data_staging.
-    """
-    filename = f"{competition.lower()}_data.csv"
-    result = importers.import_csv_adapter(filename, f"{competition.upper()}_Web", competition.upper())
-    return result
+@app.get("/persons")
+def search_persons(
+    name: Optional[str] = Query(None, description="Name der Person suchen"),
+    competition: Optional[str] = Query(None, description="Wettbewerb filtern (IMO, IOI, IMC, ICPC)"),
+    db: Session = Depends(get_db)
+):
+    """Durchsucht Personen und liefert ihre Teilnahmen und Medaillen zurück"""
+    query = db.query(Person)
 
-@app.post("/api/search")
-def search_persons(request: SearchRequest):
-    """
-    Sucht Personen, die ALLE übergebenen Kriterien erfüllen (Schnittmenge).
-    """
-    if not request.filters:
-        return []
+    if name:
+        query = query.filter(Person.full_name.ilike(f"%{name}%"))
+        
+    if competition:
+        query = query.join(Person.participations).filter(Participation.competition == competition.upper())
 
-    conn = sqlite3.connect(database.DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+    persons = query.limit(50).all()
 
-    conditions = []
-    params = []
+    return [
+        {
+            "id": p.id,
+            "name": p.full_name,
+            "country_or_uni": p.country,
+            "participations": [
+                {
+                    "competition": part.competition,
+                    "year": part.year,
+                    "score": part.score,
+                    "award": part.award
+                }
+                for part.participations in [p.participations] for part in part.participations
+            ]
+        }
+        for p in persons
+    ]
+
+@app.get("/persons/{person_id}")
+def get_person_details(person_id: int, db: Session = Depends(get_db)):
+    """Holt die vollständige Historie einer einzelnen Person"""
+    person = db.query(Person).filter(Person.id == person_id).first()
+    if not person:
+        return {"error": "Person nicht gefunden"}
     
-    for f in request.filters:
-        conditions.append("(a.competition = ? AND a.medal = ?)")
-        params.extend([f.competition, f.medal])
-
-    where_clause = " OR ".join(conditions)
-    num_conditions = len(request.filters)
-
-    query = f'''
-        SELECT p.id, p.canonical_name, p.country, 
-               GROUP_CONCAT(a.competition || ' ' || a.medal || ' (' || ifnull(a.year, 'N/A') || ')', ' | ') as all_achievements
-        FROM persons p
-        JOIN achievements a ON p.id = a.person_id
-        WHERE {where_clause}
-        GROUP BY p.id
-        HAVING COUNT(DISTINCT a.competition || a.medal) = ?
-    '''
-    params.append(num_conditions)
-    
-    cursor.execute(query, params)
-    results = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    
-    return results
-
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+    return {
+        "id": person.id,
+        "name": person.full_name,
+        "country": person.country,
+        "history": [
+            {
+                "competition": part.competition,
+                "year": part.year,
+                "score": part.score,
+                "award": part.award
+            }
+            for part.participations in [person.participations] for part in part.participations
+        ]
+    }
